@@ -1,4 +1,6 @@
 #pragma once
+
+#include <iostream>
 #include <map>
 #include <list>
 #include "Enums.h"
@@ -18,5 +20,17 @@ class OrderBook{
             else{
                 ask[order.price].push_back(order);
             }
-        } 
+        }
+
+        void Print() const {
+            std::cout << "-------------- ASKS --------------- \n"; 
+            for(const auto& [price , orders] : ask){
+                std::cout << "Price: " << price << " | Orders in queue: " << orders.size() << "\n";
+            }
+
+            std::cout << "-------------- BIDS --------------- \n"; 
+            for(const auto& [price , orders] : bid){
+                std::cout << "Price: " << price << " | Orders in queue: " << orders.size() << "\n";
+            }
+    }
 };
