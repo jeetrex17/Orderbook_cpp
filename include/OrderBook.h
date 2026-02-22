@@ -1,36 +1,99 @@
 #pragma once
 
-#include <iostream>
-#include <map>
-#include <list>
 #include "Enums.h"
 #include "Order.h"
 #include "Types.h"
+#include <iostream>
+#include <list>
+#include <map>
 
-class OrderBook{
-    private:
-        std::map<Price , std::list<Order>> ask;                             // buyser Higer lowest to highest
-        std::map<Price , std::list<Order> , std::greater<Price>> bid;       // sellers Hihgerst price to lowerst 
+class OrderBook {
+private:
+  std::map<Price, std::list<Order>> asks; // buyser Higer lowest to highest
+  std::map<Price, std::list<Order>, std::greater<Price>> bids; // sellers Hihgerst price to lowerst
 
-    public:
-        void addOrder(Order& order){
-            if(order.side == Side::Buy){
-                bid[order.price].push_back(order);
-            }
-            else{
-                ask[order.price].push_back(order);
-            }
+public:
+  void processOrder(Order newOrder) {
+
+    if (newOrder.side == Side::Buy) {
+      while (newOrder.remaining_qty > 0 && !asks.empty()) {
+        auto bestAskIter = asks.begin();
+        Price bestAskPrice = bestAskIter->first;
+        std::list<Order> &askQueue = bestAskIter->second;
+
+        if (bestAskPrice > newOrder.price) { // there is no order we can match 
+          break;
         }
 
-        void Print() const {
-            std::cout << "-------------- ASKS --------------- \n"; 
-            for(const auto& [price , orders] : ask){
-                std::cout << "Price: " << price << " | Orders in queue: " << orders.size() << "\n";
-            }
+        Order &restingAsk = askQueue.front();
 
-            std::cout << "-------------- BIDS --------------- \n"; 
-            for(const auto& [price , orders] : bid){
-                std::cout << "Price: " << price << " | Orders in queue: " << orders.size() << "\n";
-            }
+        Quantity tradeQty = std::min(restingAsk.remaining_qty , newOrder.remaining_qty);
+        newOrder.remaining_qty -= tradeQty;
+        restingAsk.remaining_qty -= tradeQty;
+
+        std::cout << "TRADE: " << tradeQty << " shares @ " << bestAskPrice
+                  << "\n";
+
+        //If the resting ask is fully filled, remove it from the queue
+        if (restingAsk.remaining_qty == 0) {
+          askQueue.pop_front();
+        }
+
+        // If the queue for this price is now empty, delete the price level from the map
+        if (askQueue.empty()) {
+          asks.erase(bestAskIter);
+        }
+      }
+
+      // After all matching is done, if the incoming order still has shares, add it to the bids map
+      if (newOrder.remaining_qty > 0) {
+        bids[newOrder.price].push_back(newOrder);
+      }
+    } else {
+    while (newOrder.remaining_qty > 0 && !bids.empty()) {
+        auto bestBidIter = bids.begin();
+        Price bestbidPrice = bestBidIter->first;
+        std::list<Order> &bidQueue = bestBidIter->second;
+
+        if (bestbidPrice < newOrder.price) {
+          break;
+        }
+
+        Order &restingbid = bidQueue.front();
+
+        Quantity tradeQty = std::min(restingbid.remaining_qty , newOrder.remaining_qty);
+        newOrder.remaining_qty -= tradeQty;
+        restingbid.remaining_qty -= tradeQty;
+
+        std::cout << "TRADE: " << tradeQty << " shares @ " << bestbidPrice << "\n";
+
+        if (restingbid.remaining_qty == 0) {
+          bidQueue.pop_front();
+        }
+
+        if (bidQueue.empty()) {
+          bids.erase(bestBidIter);
+        }
+      }
+
+      if (newOrder.remaining_qty > 0) {
+        asks[newOrder.price].push_back(newOrder);
+      }
+
     }
+  }
+
+  void Print() const {
+    std::cout << "-------------- ASKS --------------- \n";
+    for (const auto &[price, orders] : asks) {
+      std::cout << "Price: " << price << " | Orders in queue: " << orders.size()
+                << "\n";
+    }
+
+    std::cout << "-------------- BIDS --------------- \n";
+    for (const auto &[price, orders] : bids) {
+      std::cout << "Price: " << price << " | Orders in queue: " << orders.size()
+                << "\n";
+    }
+  }
 };
