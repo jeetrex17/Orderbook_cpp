@@ -83,17 +83,30 @@ public:
     }
   }
 
-  void Print() const {
-    std::cout << "-------------- ASKS --------------- \n";
-    for (const auto &[price, orders] : asks) {
-      std::cout << "Price: " << price << " | Orders in queue: " << orders.size()
-                << "\n";
+void Print() const {
+    std::cout << "--------------------- ASKS ---------------------\n";
+    if (asks.empty()) {
+        std::cout << " (no asks)\n";
+    } else {
+        for (const auto& [price, orders] : asks) {
+            std::cout << "Price: " << price 
+                      << " | Qty: " << orders.size() 
+                      << " | Orders in queue: " << orders.size() 
+                      << "\n";
+        }
     }
 
-    std::cout << "-------------- BIDS --------------- \n";
-    for (const auto &[price, orders] : bids) {
-      std::cout << "Price: " << price << " | Orders in queue: " << orders.size()
-                << "\n";
+    std::cout << "\n--------------------- BIDS ---------------------\n";
+    if (bids.empty()) {
+        std::cout << " (no bids)\n";
+    } else {
+        for (const auto& [price, orders] : bids) {
+            std::cout << "Price: " << price 
+                      << " | Qty: " << orders.size()
+                      << " | Orders in queue: " << orders.size() 
+                      << "\n";
+        }
     }
-  }
+    std::cout << "-----------------------------------------------\n\n";
+}
 };
