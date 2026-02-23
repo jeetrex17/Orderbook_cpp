@@ -3,15 +3,17 @@
 #include "Enums.h"
 #include "Order.h"
 #include "Types.h"
+#include <cstdint>
 #include <iostream>
 #include <list>
 #include <map>
+#include <unordered_map>
 
 class OrderBook {
 private:
   std::map<Price, std::list<Order>> asks; // buyser Higer lowest to highest
   std::map<Price, std::list<Order>, std::greater<Price>> bids; // sellers Hihgerst price to lowerst
-
+  std::unordered_map<OrderId, std::list<Order>::iterator> orderPointers; // this is to get O(1) when we do cancleOrder its maps order ids to excate memeory locaitons of the orders 
 public:
   void processOrder(Order newOrder) {
 
@@ -36,6 +38,7 @@ public:
 
         //If the resting ask is fully filled, remove it from the queue
         if (restingAsk.remaining_qty == 0) {
+          orderPointers.erase(restingAsk.orderid);
           askQueue.pop_front();
         }
 
@@ -47,7 +50,10 @@ public:
 
       // After all matching is done, if the incoming order still has shares, add it to the bids map
       if (newOrder.remaining_qty > 0) {
-        bids[newOrder.price].push_back(newOrder);
+        //bids[newOrder.price].push_back(newOrder);
+        auto& queue = bids[newOrder.price];  // getting referance to the list
+        auto it = queue.insert(queue.end() , newOrder);
+        orderPointers[  newOrder.orderid] = it; // insert returns an iterator to the newly inserted element
       }
     } else {
     while (newOrder.remaining_qty > 0 && !bids.empty()) {
@@ -68,6 +74,7 @@ public:
         std::cout << "TRADE: " << tradeQty << " shares @ " << bestbidPrice << "\n";
 
         if (restingbid.remaining_qty == 0) {
+          orderPointers.erase(restingbid.orderid);   // we have to remove tracking FIRST or there will be use after free
           bidQueue.pop_front();
         }
 
@@ -77,12 +84,18 @@ public:
       }
 
       if (newOrder.remaining_qty > 0) {
-        asks[newOrder.price].push_back(newOrder);
+        //asks[newOrder.price].push_back(newOrder);
+        auto& queue = asks[newOrder.price];
+        auto it = queue.insert(queue.end(), newOrder);
+        orderPointers[newOrder.orderid] = it;
       }
 
     }
   }
+  // todo 
+void cancelOrder(OrderId id) {
 
+}
 void Print() const {
     std::cout << "--------------------- ASKS ---------------------\n";
     if (asks.empty()) {
