@@ -40,8 +40,7 @@ public:
           break;
         }
 
-        const Quantity tradeQty =
-            std::min(order.remaining_qty, best_it->remaining_qty);
+        const Quantity tradeQty = std::min(order.remaining_qty, best_it->remaining_qty);
         order.remaining_qty -= tradeQty;
         best_it->remaining_qty -= tradeQty;
         if (best_it->remaining_qty == 0) {
@@ -69,8 +68,7 @@ public:
           break;
         }
 
-        const Quantity tradeQty =
-            std::min(order.remaining_qty, best_it->remaining_qty);
+        const Quantity tradeQty = std::min(order.remaining_qty, best_it->remaining_qty);
         order.remaining_qty -= tradeQty;
         best_it->remaining_qty -= tradeQty;
         if (best_it->remaining_qty == 0) {

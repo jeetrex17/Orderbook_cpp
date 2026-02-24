@@ -125,7 +125,6 @@ void cancelOrder(OrderId id) {
         }
     }
 
-    // 4. Always remove from the tracking map (very important!)
     orderPointers.erase(mapIt);
 }
 void Print() const {
