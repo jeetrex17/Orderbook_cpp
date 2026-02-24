@@ -92,9 +92,41 @@ public:
 
     }
   }
-  // todo 
 void cancelOrder(OrderId id) {
+    auto mapIt = orderPointers.find(id);
+    if (mapIt == orderPointers.end()) {
+        return; 
+    }
 
+    auto listIterator = mapIt->second;           // this is std::list<Order>::iterator
+    Price price       = listIterator->price;     // the price level where it lives
+    Side  side        = listIterator->side;
+
+    if (side == Side::Buy) {
+        auto priceIt = bids.find(price);
+        if (priceIt != bids.end()) {
+            auto& orderList = priceIt->second;
+            orderList.erase(listIterator);          
+
+            if (orderList.empty()) {
+                bids.erase(priceIt);
+            }
+        }
+    }
+    else {  // Side::Sell
+        auto priceIt = asks.find(price);
+        if (priceIt != asks.end()) {
+            auto& orderList = priceIt->second;
+            orderList.erase(listIterator);
+
+            if (orderList.empty()) {
+                asks.erase(priceIt);
+            }
+        }
+    }
+
+    // 4. Always remove from the tracking map (very important!)
+    orderPointers.erase(mapIt);
 }
 void Print() const {
     std::cout << "--------------------- ASKS ---------------------\n";
