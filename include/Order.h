@@ -15,10 +15,12 @@ struct Order {
           price(p),
           side(s),
           initial_qty(init_qty),
-          remaining_qty(rem_qty != 0 ? rem_qty : init_qty)  
+          remaining_qty(rem_qty != 0 ? rem_qty : init_qty)
     {
-        assert(init_qty > 0);
-        assert(rem_qty <= init_qty);
-        assert(rem_qty >= 0);
+        // Quantity is unsigned, so a ">= 0" check would always hold. Assert on
+        // the resolved remaining_qty instead of the raw argument, which is 0
+        // in the common "remaining defaults to initial" case.
+        assert(init_qty > 0 && "an order must have positive quantity");
+        assert(remaining_qty <= initial_qty && "remaining cannot exceed initial");
     }
 };
