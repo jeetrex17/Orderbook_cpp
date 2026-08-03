@@ -1,0 +1,72 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "dev",
+      "inherits": "base",
+      "displayName": "Debug + standard-library hardening",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ORDERBOOK_HARDENED": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release (-O3, NDEBUG)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "asan-ubsan",
+      "inherits": "base",
+      "displayName": "AddressSanitizer + UndefinedBehaviorSanitizer",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ORDERBOOK_HARDENED": "ON",
+        "ORDERBOOK_SANITIZERS": "address;undefined"
+      }
+    },
+    {
+      "name": "profile",
+      "inherits": "base",
+      "displayName": "RelWithDebInfo with frame pointers (for valgrind)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g -DNDEBUG -fno-omit-frame-pointer",
+        "ORDERBOOK_BUILD_TESTS": "OFF"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "dev",        "configurePreset": "dev" },
+    { "name": "release",    "configurePreset": "release" },
+    { "name": "asan-ubsan", "configurePreset": "asan-ubsan" },
+    { "name": "profile",    "configurePreset": "profile" }
+  ],
+
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "stopOnFailure": false }
+    },
+    { "name": "dev",        "inherits": "base", "configurePreset": "dev" },
+    { "name": "release",    "inherits": "base", "configurePreset": "release" },
+    { "name": "asan-ubsan", "inherits": "base", "configurePreset": "asan-ubsan" }
+  ]
+}
