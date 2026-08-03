@@ -1,1 +1,28 @@
-*.main 
+# Build output
+build/
+out/
+main
+orderbook_demo
+orderbook_bench
+orderbook_tests
+
+# Object files / archives
+*.o
+*.a
+*.so
+*.dylib
+
+# Tooling
+compile_commands.json
+.cache/
+.ccache/
+
+# Profiling output
+tools/profile/results/
+cachegrind.out.*
+callgrind.out.*
+cg.*
+cl.*
+
+# macOS
+.DS_Store
