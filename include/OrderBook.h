@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Enums.h"
+#include "IdIndex.h"
 #include "Order.h"
 #include "Trade.h"
 #include "Types.h"
@@ -12,7 +13,6 @@
 #include <limits>
 #include <map>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
 // Outcome of submitting an order. Rejection happens before any matching, so a
@@ -63,7 +63,7 @@ private:
 
   std::map<Price, Level> asks_;                      // lowest price is best
   std::map<Price, Level, std::greater<Price>> bids_; // highest price is best
-  std::unordered_map<OrderId, uint32_t> index_;      // order id -> slab slot
+  IdIndex index_;                                    // order id -> slab slot
 
   // -- slab management ------------------------------------------------------
 
@@ -144,7 +144,7 @@ public:
   // but impossible to cancel -- and, when it later filled, erasing the *new*
   // order's tracking entry too.
   SubmitResult processOrder(const Order &incoming, std::vector<Trade> &out) {
-    if (index_.find(incoming.orderid) != index_.end()) {
+    if (index_.find(incoming.orderid) != IdIndex::kMissing) {
       return SubmitResult::RejectedDuplicateId;
     }
 
@@ -224,7 +224,7 @@ public:
       Level &level = (incoming.side == Side::Buy) ? bids_[incoming.price]
                                                   : asks_[incoming.price];
       pushBack(level, idx);
-      index_[incoming.orderid] = idx;
+      index_.insert(incoming.orderid, idx);
     }
 
     return SubmitResult::Accepted;
@@ -240,12 +240,11 @@ public:
   // Removes a resting order. Cancelling an unknown, already-filled, or
   // already-cancelled id is a no-op. Returns whether anything was removed.
   bool cancelOrder(OrderId id) {
-    const auto indexIt = index_.find(id);
-    if (indexIt == index_.end()) {
+    const uint32_t idx = index_.find(id);
+    if (idx == IdIndex::kMissing) {
       return false;
     }
 
-    const uint32_t idx = indexIt->second;
     const Price price = slab_[idx].price;
     const Side side = slab_[idx].side;
 
@@ -266,7 +265,7 @@ public:
     }
 
     freeNode(idx);
-    index_.erase(indexIt);
+    index_.erase(id);
     return true;
   }
 
@@ -294,11 +293,11 @@ public:
 
   // Remaining quantity of a live resting order, or nullopt if it isn't resting.
   std::optional<Quantity> restingQty(OrderId id) const {
-    const auto it = index_.find(id);
-    if (it == index_.end()) {
+    const uint32_t idx = index_.find(id);
+    if (idx == IdIndex::kMissing) {
       return std::nullopt;
     }
-    return slab_[it->second].qty;
+    return slab_[idx].qty;
   }
 
   std::size_t restingOrderCount() const { return index_.size(); }
