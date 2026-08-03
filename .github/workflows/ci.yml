@@ -32,13 +32,22 @@ jobs:
             compiler: gcc
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
+      # Installed directly rather than via an action: the available action
+      # still runs on Node 20, which GitHub has deprecated.
       - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v5
+        shell: bash
+        run: |
+          if command -v ninja >/dev/null; then ninja --version; exit 0; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            brew install ninja
+          else
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          fi
 
       - name: Cache compiled objects
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
         with:
           key: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.preset }}
 
@@ -71,13 +80,22 @@ jobs:
     name: ASan + UBSan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
+      # Installed directly rather than via an action: the available action
+      # still runs on Node 20, which GitHub has deprecated.
       - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v5
+        shell: bash
+        run: |
+          if command -v ninja >/dev/null; then ninja --version; exit 0; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            brew install ninja
+          else
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          fi
 
       - name: Cache compiled objects
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
         with:
           key: sanitizers
 
@@ -111,13 +129,22 @@ jobs:
     name: Benchmark smoke test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
+      # Installed directly rather than via an action: the available action
+      # still runs on Node 20, which GitHub has deprecated.
       - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v5
+        shell: bash
+        run: |
+          if command -v ninja >/dev/null; then ninja --version; exit 0; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            brew install ninja
+          else
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          fi
 
       - name: Cache compiled objects
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@v1.2.23
         with:
           key: benchmark
 
