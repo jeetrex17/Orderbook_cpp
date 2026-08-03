@@ -12,6 +12,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <memory_resource>
 #include <optional>
 #include <vector>
 
@@ -61,8 +62,19 @@ private:
   std::vector<Node> slab_;
   uint32_t free_head_ = kNull; // free-slot chain, threaded through Node::next
 
-  std::map<Price, Level> asks_;                      // lowest price is best
-  std::map<Price, Level, std::greater<Price>> bids_; // highest price is best
+  // std::map allocates a node per price level, and levels are created and
+  // destroyed constantly as a book trades -- in the profile that churn showed up
+  // as ~10% of all instructions, essentially all of it inside malloc. A pool
+  // resource recycles those fixed-size blocks instead of handing them back to
+  // the system allocator, which removes the allocation traffic while keeping
+  // the tree's O(log P) lookup.
+  //
+  // A flat sorted vector was tried here instead and rejected: it matched the
+  // tree at ~200 price levels but was 1.7x slower at 2,000 and 6.3x slower at
+  // 20,000, because every insert and erase became an O(P) memmove.
+  std::pmr::unsynchronized_pool_resource pool_;
+  std::pmr::map<Price, Level> asks_{&pool_};                      // lowest price is best
+  std::pmr::map<Price, Level, std::greater<Price>> bids_{&pool_}; // highest price is best
   IdIndex index_;                                    // order id -> slab slot
 
   // -- slab management ------------------------------------------------------
@@ -130,6 +142,15 @@ private:
   }
 
 public:
+  OrderBook() = default;
+
+  // The price-level maps hold a pointer to this object's own pool, so a copied
+  // or moved book would leave its maps allocating from the original's resource.
+  OrderBook(const OrderBook &) = delete;
+  OrderBook &operator=(const OrderBook &) = delete;
+  OrderBook(OrderBook &&) = delete;
+  OrderBook &operator=(OrderBook &&) = delete;
+
   // ------------------------------------------------------------------
   // Mutation
   // ------------------------------------------------------------------
