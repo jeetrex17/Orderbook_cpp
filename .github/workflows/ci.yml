@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Warnings are errors in CI only. Locally they stay warnings so an in-progress
+  # edit isn't blocked by an unused variable.
+  CMAKE_ARGS: -DORDERBOOK_WERROR=ON
+
+jobs:
+  build-test:
+    name: ${{ matrix.os }} / ${{ matrix.compiler }} / ${{ matrix.preset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        compiler: [gcc, clang]
+        preset: [dev, release]
+        exclude:
+          # Apple's toolchain is clang; "gcc" on macOS runners is a clang alias,
+          # so running it would just duplicate the clang job.
+          - os: macos-latest
+            compiler: gcc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Cache compiled objects
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.preset }}
+
+      - name: Select compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            echo "CC=gcc"  >> "$GITHUB_ENV"
+            echo "CXX=g++"  >> "$GITHUB_ENV"
+          else
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure
+        run: >
+          cmake --preset ${{ matrix.preset }} $CMAKE_ARGS
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+      - name: Run the demo
+        run: ./build/${{ matrix.preset }}/orderbook_demo
+
+  sanitizers:
+    name: ASan + UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Cache compiled objects
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: sanitizers
+
+      - name: Configure
+        env:
+          CC: clang
+          CXX: clang++
+        run: >
+          cmake --preset asan-ubsan $CMAKE_ARGS
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset asan-ubsan
+
+      # LeakSanitizer is unavailable on Apple Silicon, so leak detection only
+      # ever runs here. The property tests are the point of this job: they drive
+      # far more of the state space than the unit tests do.
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ctest --preset asan-ubsan
+
+  # No ThreadSanitizer job. The engine is single-threaded -- there is no
+  # concurrent access anywhere in it -- so a TSan run would verify nothing and a
+  # green badge would be misleading. It belongs here the day a threaded ingress
+  # path exists, and not before.
+
+  benchmark:
+    name: Benchmark smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Cache compiled objects
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: benchmark
+
+      - name: Configure
+        run: >
+          cmake --preset release $CMAKE_ARGS -DORDERBOOK_BUILD_TESTS=OFF
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset release
+
+      # A reduced order count keeps this under a few seconds: the naive baseline
+      # is O(N) per order, so it dominates wall-clock as N grows. The benchmark
+      # exits non-zero if the two books disagree on the number of executions,
+      # which makes this a cheap extra consistency check as well as a timing run.
+      - name: Run
+        run: ./build/release/orderbook_bench --orders 20000 --runs 3
