@@ -23,6 +23,7 @@ add_executable(orderbook_tests
   test_matching.cpp
   test_cancel.cpp
   test_id_index.cpp
+  test_feed_replay.cpp
   prop_invariants.cpp
   prop_differential.cpp)
 

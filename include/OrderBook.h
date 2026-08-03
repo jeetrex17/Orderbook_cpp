@@ -258,6 +258,73 @@ public:
     return trades;
   }
 
+  // ------------------------------------------------------------------
+  // Feed replay
+  // ------------------------------------------------------------------
+  //
+  // processOrder() and cancelOrder() model an exchange: orders arrive, the book
+  // matches them, and it decides what trades happen. Rebuilding a book from a
+  // market-data feed is the mirror image -- the exchange has already matched,
+  // and the feed only reports what it decided. Replaying those messages through
+  // the matching path makes this book match a second time, inventing trades the
+  // exchange never published and removing orders it still shows as resting.
+  //
+  // These two entry points apply feed messages as facts rather than as orders
+  // to be matched.
+
+  // Rests an order without matching it, for a feed 'Add'. Such a message
+  // describes an order the exchange has already matched as far as it intends to
+  // and chose to publish as resting, so matching it here would be wrong even
+  // when it crosses this book's current levels.
+  //
+  // Because of that, a book built this way can legitimately show a crossed
+  // spread -- unlike one built through processOrder(), which never can.
+  //
+  // Rejects a duplicate id for the same reason processOrder() does: the id
+  // index would silently retarget, orphaning the order it used to point at.
+  SubmitResult insertResting(const Order &incoming) {
+    if (index_.find(incoming.orderid) != IdIndex::kMissing) {
+      return SubmitResult::RejectedDuplicateId;
+    }
+
+    const uint32_t idx = allocNode(); // may reallocate slab_
+    slab_[idx].id = incoming.orderid;
+    slab_[idx].qty = incoming.remaining_qty;
+    slab_[idx].price = incoming.price;
+    slab_[idx].side = incoming.side;
+
+    Level &level = (incoming.side == Side::Buy) ? bids_[incoming.price]
+                                                : asks_[incoming.price];
+    pushBack(level, idx);
+    index_.insert(incoming.orderid, idx);
+    return SubmitResult::Accepted;
+  }
+
+  // Applies an execution the exchange reported against a resting order, for a
+  // feed 'Execute'. Returns false if the id is not resting -- unknown, already
+  // filled, or already cancelled -- which is a normal thing to see on a feed
+  // joined mid-stream, not an error.
+  //
+  // A fill at or beyond the remaining quantity removes the order. Anything less
+  // decrements in place, which is the point: the order keeps its price level
+  // and, critically, its position in that level's FIFO queue. Cancelling and
+  // re-adding would surrender time priority, and routing the remainder back
+  // through processOrder() could match it against a book that has moved on.
+  //
+  // Quantity is unsigned, so the >= case must not be written as a subtraction.
+  bool reduceQty(OrderId id, Quantity qty) {
+    const uint32_t idx = index_.find(id);
+    if (idx == IdIndex::kMissing) {
+      return false;
+    }
+
+    if (qty < slab_[idx].qty) {
+      slab_[idx].qty -= qty;
+      return true;
+    }
+    return cancelOrder(id);
+  }
+
   // Removes a resting order. Cancelling an unknown, already-filled, or
   // already-cancelled id is a no-op. Returns whether anything was removed.
   bool cancelOrder(OrderId id) {

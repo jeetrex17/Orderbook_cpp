@@ -37,10 +37,44 @@ Order ids must be unique among *live resting* orders; a duplicate is rejected
 before any matching happens, so a rejected order never executes. Once an order
 has fully filled or been cancelled, its id is free to reuse.
 
+## Matching engine vs. display book
+
+`processOrder` and `cancelOrder` model **an exchange**: orders arrive, the book
+matches them, and it decides what trades happen.
+
+Rebuilding a book from a **market-data feed** is the mirror image. The exchange
+has already matched; the feed only reports what it decided. `Add` describes an
+order that ended up resting, `Execute` reports a fill the exchange performed,
+`Cancel` reports a removal. Replaying those through `processOrder` makes this
+book match a *second* time — inventing trades the exchange never published and
+removing orders it still shows as resting. On a real feed replay that produced
+89,241 phantom trades and left ~101,000 orders diverged from the publisher.
+
+Two entry points apply feed messages as facts instead:
+
+```cpp
+book.insertResting(Order(id, price, side, qty));  // feed 'Add'  -- rests, never matches
+book.reduceQty(id, filled_qty);                   // feed 'Execute' -- decrements in place
+```
+
+`insertResting` rests an order even when it crosses the current levels, because
+the exchange already decided to publish it as resting. **A book built this way
+can legitimately show a crossed spread**, which one built through `processOrder`
+never can.
+
+`reduceQty` decrements in place rather than cancel-and-re-add, so a partially
+filled order keeps its position in its level's FIFO queue. A fill at or beyond
+the remaining quantity removes the order — written as a comparison, not a
+subtraction, since `Quantity` is unsigned and the naive form wraps to ~1.8e19.
+
+That asymmetry is why the feed-replay property tests use their own generator
+rather than `tests/TestOps.h`: "the book is never crossed" is a property of the
+matching path, not of an order book as such.
+
 ## Correctness
 
-43 tests: unit tests for matching and cancellation, property tests, and a
-differential test.
+58 tests: unit tests for matching, cancellation and feed replay, property tests,
+and a differential test.
 
 **Property tests** (RapidCheck) generate random operation streams and check the
 invariants after every operation. RapidCheck shrinks a failure to the smallest
@@ -70,6 +104,8 @@ broken build:
 | LIFO instead of FIFO insertion | `QueuesAreInSubmissionOrder`, differential, 2 unit tests |
 | Equal prices no longer cross | `BookIsNeverCrossed`, differential, 1 unit test |
 | Order left in the id index after its slot is freed | ASan: `heap-use-after-free in OrderBook::cancelOrder` |
+| `reduceQty` written as a plain unsigned subtraction | `FillGreaterThanRemaining...`, 2 feed-replay properties |
+| `insertResting` routed through the matching path | `CrossingAddRestsInsteadOfMatching`, `QuantityIsConserved` |
 
 The first version of the time-priority property did **not** catch the LIFO bug:
 it checked that matching consumes a queue front-first, but never that the queue
@@ -203,7 +239,7 @@ of trades, and exits non-zero if they disagree.
 ## Layout
 
 ```
-include/OrderBook.h        matching engine
+include/OrderBook.h        matching engine + feed replay
 include/IdIndex.h          open-addressing order id -> slab slot map
 include/Order.h  Trade.h  Types.h  Enums.h
 benchmark/                 naive baseline + benchmark harness
